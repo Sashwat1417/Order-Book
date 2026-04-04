@@ -69,10 +69,15 @@ static bsoncxx::document::value excludeId() {
 
 json OrderRepository::findOpenBids() {
     try {
+        // Store all bsoncxx documents in named variables — views must not outlive their owner
+        auto sort_doc       = stream::document{} << "price" << -1 << stream::finalize;
+        auto projection_doc = excludeId();
+        auto filter         = openStatusFilter();
+
         mongocxx::options::find opts;
-        opts.sort(stream::document{} << "price" << -1 << stream::finalize);
-        opts.projection(excludeId().view());
-        auto filter = openStatusFilter();
+        opts.sort(sort_doc.view());
+        opts.projection(projection_doc.view());
+
         auto cursor = bids_.find(filter.view(), opts);
         return cursorToJson(cursor);
     } catch (const mongocxx::exception& e) {
@@ -82,10 +87,14 @@ json OrderRepository::findOpenBids() {
 
 json OrderRepository::findOpenAsks() {
     try {
+        auto sort_doc       = stream::document{} << "price" << 1 << stream::finalize;
+        auto projection_doc = excludeId();
+        auto filter         = openStatusFilter();
+
         mongocxx::options::find opts;
-        opts.sort(stream::document{} << "price" << 1 << stream::finalize);
-        opts.projection(excludeId().view());
-        auto filter = openStatusFilter();
+        opts.sort(sort_doc.view());
+        opts.projection(projection_doc.view());
+
         auto cursor = asks_.find(filter.view(), opts);
         return cursorToJson(cursor);
     } catch (const mongocxx::exception& e) {
