@@ -16,7 +16,7 @@ static int64_t nowMs() {
     ).count();
 }
 
-    static std::string generateId() {
+static std::string generateId() {
     static std::mt19937 gen(std::random_device{}());
     static std::uniform_int_distribution<uint32_t> dis;
     return std::to_string(nowMs()) + "-" + std::to_string(dis(gen));

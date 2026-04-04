@@ -1,61 +1,103 @@
 # Order Book
 
-## Overview
+A distributed financial order book built in **C++17** — featuring a REST API for order placement, MongoDB persistence, and a Kafka-driven async matching engine.
 
-An **order book** is a real-time, continuously updated record of all outstanding buy and sell orders for a financial instrument (stocks, futures, cryptocurrencies, etc.) on an exchange or trading venue.
-
-It acts as the central mechanism through which buyers and sellers interact, providing transparency into market depth and price discovery.
+> First project exploring distributed systems concepts in C++.
 
 ---
 
-## Structure
+## What it does
 
-An order book is divided into two sides:
-
-- **Bid side** — buy orders, sorted from highest price to lowest (buyers willing to pay the most are at the top)
-- **Ask side** — sell orders, sorted from lowest price to highest (sellers willing to accept the least are at the top)
-
-The difference between the best bid and the best ask is called the **spread**.
+- Accepts **buy (bid)** and **sell (ask)** limit orders via a REST API
+- Persists orders to **MongoDB** and publishes them to **Kafka**
+- A separate **matching engine** consumes orders asynchronously, matches them by price-time priority, and records trades
 
 ---
 
-## How It Works
+## Architecture
 
-1. A trader places a **limit order** specifying a price and quantity.
-2. The order enters the book and waits until a matching order on the opposite side arrives.
-3. When a **market order** arrives, it matches against the best available price on the opposite side.
-4. Matched orders result in a **trade** (execution), removing liquidity from the book.
-5. Unmatched orders remain in the book until filled, cancelled, or expired.
-
----
-
-## Key Concepts
-
-| Term | Description |
-|------|-------------|
-| **Limit Order** | An order to buy/sell at a specific price or better |
-| **Market Order** | An order to buy/sell immediately at the best available price |
-| **Best Bid** | Highest price a buyer is currently willing to pay |
-| **Best Ask** | Lowest price a seller is currently willing to accept |
-| **Spread** | Difference between best bid and best ask |
-| **Depth** | Volume of orders available at each price level |
-| **Price Level** | A specific price point aggregating all orders at that price |
-| **Matching Engine** | The system that pairs buy and sell orders to execute trades |
+```
+Client  →  order-service  →  MongoDB (bids / asks)
+                          →  Kafka: new-orders
+                                       ↓
+                             matching-engine
+                                       ↓
+                             MongoDB (trades)  +  Kafka: trades
+```
 
 ---
 
-## Price-Time Priority
+## Tech Stack
 
-Most order books follow **FIFO (First In, First Out)** matching within a price level:
+![C++](https://img.shields.io/badge/C++-17-00599C?style=flat&logo=c%2B%2B)
+![MongoDB](https://img.shields.io/badge/MongoDB-green?style=flat&logo=mongodb)
+![Kafka](https://img.shields.io/badge/Kafka-231F20?style=flat&logo=apachekafka)
+![CMake](https://img.shields.io/badge/CMake-064F8C?style=flat&logo=cmake)
 
-- Orders at the same price are filled in the order they were received.
-- Better-priced orders are always filled before worse-priced ones.
+| Concern | Technology |
+|---|---|
+| HTTP Server | cpp-httplib |
+| Database | MongoDB (mongocxx) |
+| Messaging | Apache Kafka (librdkafka) |
+| JSON | nlohmann/json |
+| Build | CMake |
 
 ---
 
-## Use Cases
+## API
 
-- **Price discovery** — reflects the current consensus value of an asset
-- **Liquidity assessment** — shows how easily large orders can be absorbed
-- **Algorithmic trading** — strategies like market making, arbitrage, and HFT rely on real-time order book data
-- **Risk management** — traders use book depth to estimate slippage and market impact
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/order` | Place a bid or ask order |
+| `GET` | `/orderbook` | View open bids and asks |
+| `DELETE` | `/order/:id` | Cancel an order |
+
+---
+
+## Running Locally
+
+### 1. Install dependencies
+```bash
+brew install cmake mongo-cxx-driver librdkafka boost kafka
+```
+
+### 2. Start infrastructure
+```bash
+brew services start zookeeper
+brew services start kafka
+brew services start mongodb-community
+```
+
+### 3. Create Kafka topics _(first time only)_
+```bash
+kafka-topics --create --topic new-orders --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+kafka-topics --create --topic trades --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+```
+
+### 4. Build
+```bash
+cmake -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build
+```
+
+### 5. Run
+```bash
+./build/order/order-service        # Terminal 1 — REST API on :3000
+./build/matching-engine/matching-engine  # Terminal 2 — matching engine
+```
+
+### Environment variables
+| Variable | Default | Description |
+|---|---|---|
+| `MONGO_URI` | `mongodb://localhost:27017` | MongoDB URI |
+| `KAFKA_BROKERS` | `localhost:9092` | Kafka broker |
+| `SERVER_PORT` | `3000` | API port |
+
+---
+
+## Documentation
+
+| Doc | Description |
+|---|---|
+| [PRD](docs/PRD.md) | Requirements, scope, functional & non-functional specs |
+| [HLD & LLD](docs/HLD-LLD.md) | Architecture, design decisions, data models, API contracts |
