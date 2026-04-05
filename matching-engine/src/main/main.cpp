@@ -101,6 +101,8 @@ int main() {
                   << " open order(s) from MongoDB.\n";
 
         MatchingService service(client, repo, producer, book);
+        service.runPostSeedMatch();
+
         OrderListener   listener(brokers, inputTopic, groupId);
 
         std::cout << "[MatchingEngine] Started."

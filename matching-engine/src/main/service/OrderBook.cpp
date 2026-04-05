@@ -93,6 +93,11 @@ void OrderBook::loadOrder(const Order& order) {
               << " | status=" << order.statusToString() << "\n";
 }
 
+std::vector<MatchResult> OrderBook::runPostSeedMatch() {
+    std::cout << "[OrderBook] Running post-seed match sweep...\n";
+    return match();
+}
+
 std::vector<MatchResult> OrderBook::addOrder(Order order) {
     if (!tryMarkOrderIdSeen(order.id)) {
         std::cout << "[OrderBook] Duplicate order skipped (already processed): " << order.id << "\n";
