@@ -42,3 +42,4 @@ find_path(RDKAFKA_INCLUDE_DIR librdkafka/rdkafkacpp.h PATHS /opt/homebrew/opt/li
 add_subdirectory(common)
 add_subdirectory(order)
 add_subdirectory(matching-engine)
+add_subdirectory(notification-service)

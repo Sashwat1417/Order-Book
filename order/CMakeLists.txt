@@ -4,6 +4,7 @@ add_executable(order-service
     src/service/OrderService.cpp
     src/db/OrderRepository.cpp
     src/kafka/KafkaProducer.cpp
+    src/outbox/OutboxRelay.cpp
 )
 
 target_include_directories(order-service PRIVATE
