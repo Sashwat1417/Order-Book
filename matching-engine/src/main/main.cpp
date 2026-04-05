@@ -2,7 +2,6 @@
 #include <csignal>
 #include <atomic>
 #include <cstdlib>
-#include <stdexcept>
 
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>

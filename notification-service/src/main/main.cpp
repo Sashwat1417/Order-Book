@@ -2,7 +2,6 @@
 #include <csignal>
 #include <atomic>
 #include <cstdlib>
-#include <stdexcept>
 
 #include "listener/TradeListener.hpp"
 #include "service/NotificationService.hpp"
