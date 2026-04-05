@@ -30,11 +30,18 @@ struct Order {
         o.id        = j.at("id").get<std::string>();
         o.price     = j.at("price").get<double>();
         o.quantity  = j.at("quantity").get<double>();
-        o.remaining = o.quantity;
-        o.status    = OrderStatus::OPEN;
+        o.remaining = j.value("remaining", o.quantity);
         o.timestamp = j.at("timestamp").get<int64_t>();
+
         std::string side = j.at("side").get<std::string>();
         o.side = (side == "BID") ? Side::BID : Side::ASK;
+
+        std::string status = j.value("status", std::string("OPEN"));
+        if      (status == "PARTIALLY_FILLED") o.status = OrderStatus::PARTIALLY_FILLED;
+        else if (status == "FILLED")           o.status = OrderStatus::FILLED;
+        else if (status == "CANCELLED")        o.status = OrderStatus::CANCELLED;
+        else                                   o.status = OrderStatus::OPEN;
+
         return o;
     }
 
