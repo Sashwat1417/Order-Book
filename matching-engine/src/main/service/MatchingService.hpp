@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <mongocxx/client.hpp>
 
@@ -33,9 +34,16 @@ public:
     // persist every resulting trade atomically, and publish each trade to Kafka.
     void processOrder(const std::string& orderJson);
 
+    // Run a match sweep on the already-seeded book and persist/publish any
+    // trades produced. Called once at startup after loadOrder() seeding to
+    // resolve crossings left by a mid-match crash.
+    void runPostSeedMatch();
+
 private:
     mongocxx::client& client_;
     TradeRepository&  repo_;
     TradeProducer&    producer_;
     OrderBook&        book_;   // injected — seeded before first message arrives
+
+    void persistAndPublish(const std::vector<MatchResult>& results);
 };
