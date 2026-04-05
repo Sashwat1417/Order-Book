@@ -6,7 +6,11 @@ TradeProducer::TradeProducer(const std::string& brokers, const std::string& topi
 {
     std::string errstr;
     auto* conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-    conf->set("bootstrap.servers", brokers, errstr);
+
+    if (conf->set("bootstrap.servers", brokers, errstr) != RdKafka::Conf::CONF_OK) {
+        delete conf;
+        throw std::runtime_error("Kafka config error [bootstrap.servers]: " + errstr);
+    }
 
     producer_.reset(RdKafka::Producer::create(conf, errstr));
     delete conf;

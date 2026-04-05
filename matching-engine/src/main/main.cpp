@@ -2,11 +2,13 @@
 #include <csignal>
 #include <atomic>
 #include <cstdlib>
+#include <chrono>
 
 #include <mongocxx/client.hpp>
 #include <mongocxx/instance.hpp>
 #include <mongocxx/uri.hpp>
 
+#include "dedup/RedisDeduplicator.hpp"
 #include "listener/OrderListener.hpp"
 #include "producer/TradeProducer.hpp"
 #include "db/TradeRepository.hpp"
@@ -33,6 +35,12 @@ int main() {
     std::string outputTopic = getenv_or("KAFKA_OUTPUT_TOPIC",  "trades");
     std::string groupId     = getenv_or("KAFKA_GROUP_ID",      "matching-engine-group");
 
+    std::string redisEnabled  = getenv_or("REDIS_DEDUP_ENABLED", "0");
+    std::string redisHost     = getenv_or("REDIS_HOST",          "localhost");
+    std::string redisPortStr  = getenv_or("REDIS_PORT",          "6379");
+    std::string redisTtlStr   = getenv_or("REDIS_DEDUP_TTL_MS",  "86400000");
+    std::string redisPassword = getenv_or("REDIS_PASSWORD",      "");
+
     try {
         // MongoDB setup — one instance per process (mongocxx requirement)
         mongocxx::instance instance{};
@@ -41,6 +49,11 @@ int main() {
 
         TradeRepository repo(db);
         TradeProducer   producer(brokers, outputTopic);
+
+        auto nowMs = []() -> int64_t {
+            using namespace std::chrono;
+            return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+        };
 
         // ── Startup seeding ───────────────────────────────────────────────
         // Load all OPEN/PARTIALLY_FILLED orders from MongoDB into the book
@@ -55,7 +68,31 @@ int main() {
         // recording the Kafka offset BEFORE the DB query and starting from
         // that offset — acceptable gap for this project.
         // ─────────────────────────────────────────────────────────────────
-        OrderBook book;
+        std::unique_ptr<RedisDeduplicator> dedup;
+        if (redisEnabled == "1" || redisEnabled == "true" || redisEnabled == "TRUE") {
+            int redisPort = std::stoi(redisPortStr);
+            int64_t ttlMs = std::stoll(redisTtlStr);
+            dedup = std::make_unique<RedisDeduplicator>(redisHost, redisPort, ttlMs, redisPassword);
+            std::cout << "[MatchingEngine] Redis dedupe enabled."
+                      << " host=" << redisHost << ":" << redisPort
+                      << " ttlMs=" << ttlMs << "\n";
+
+            // Pre-warm dedupe with recent order IDs (any status) so Kafka replays
+            // after restart are skipped immediately. Redis eviction handles being full.
+            const int64_t since = nowMs() - ttlMs;
+            auto recentIds = repo.findOrderIdsSince(since);
+            size_t marked = 0;
+            for (const auto& id : recentIds) {
+                if (dedup->tryMarkSeen(id)) marked++;
+            }
+            std::cout << "[MatchingEngine] Pre-warmed Redis dedupe with "
+                      << recentIds.size() << " order id(s) since " << since
+                      << " (newly marked=" << marked << ").\n";
+        } else {
+            std::cout << "[MatchingEngine] Redis dedupe disabled (using in-memory TTL cache).\n";
+        }
+
+        OrderBook book(std::move(dedup));
         auto openOrders = repo.findOpenOrders();
         for (const auto& order : openOrders) {
             book.loadOrder(order);   // insert without matching — already processed
@@ -63,7 +100,7 @@ int main() {
         std::cout << "[MatchingEngine] Seeded " << openOrders.size()
                   << " open order(s) from MongoDB.\n";
 
-        MatchingService service(repo, producer, book);
+        MatchingService service(client, repo, producer, book);
         OrderListener   listener(brokers, inputTopic, groupId);
 
         std::cout << "[MatchingEngine] Started."

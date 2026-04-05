@@ -31,7 +31,12 @@ int main() {
     const std::string mongoUri     = env("MONGO_URI",     "mongodb://localhost:27017");
     const std::string kafkaBrokers = env("KAFKA_BROKERS", "localhost:9092");
     const std::string kafkaTopic   = env("KAFKA_TOPIC",   "new-orders");
-    const int         serverPort   = std::stoi(env("SERVER_PORT", "3000"));
+    int serverPort = 3000;
+    try {
+        serverPort = std::stoi(env("SERVER_PORT", "3000"));
+    } catch (const std::exception& e) {
+        std::cerr << "[API] Invalid SERVER_PORT, using default 3000\n";
+    }
 
     std::cout << "[API] Config:\n"
               << "  MONGO_URI:     " << mongoUri     << "\n"
@@ -76,6 +81,7 @@ int main() {
     // Graceful shutdown
     relay.stop();
     relayThread.join();
+    std::cout << "[OutboxRelay] Stopped.\n";
     std::cout << "[API] Shutdown complete.\n";
 
     return 0;

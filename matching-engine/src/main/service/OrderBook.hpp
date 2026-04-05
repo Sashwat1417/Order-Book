@@ -4,8 +4,13 @@
 #include <deque>
 #include <vector>
 #include <functional>
-#include <unordered_set>
+#include <unordered_map>
 #include <string>
+#include <cstdint>
+#include <utility>
+#include <memory>
+
+class RedisDeduplicator;
 
 #include "Order.hpp"
 #include "Trade.hpp"
@@ -17,10 +22,12 @@ struct MatchResult {
 };
 
 // Java analogy: a stateful @Component holding two TreeMaps.
-// Bids: TreeMap<Double, Deque<Order>> sorted descending (highest price first).
-// Asks: TreeMap<Double, Deque<Order>> sorted ascending  (lowest price first).
+// Bids: TreeMap<Long, Deque<Order>> sorted descending (highest price first).
+// Asks: TreeMap<Long, Deque<Order>> sorted ascending  (lowest price first).
 class OrderBook {
 public:
+    explicit OrderBook(std::unique_ptr<RedisDeduplicator> deduplicator = nullptr);
+
     // Add an order and run the match loop.
     // Returns every trade produced (zero or more).
     std::vector<MatchResult> addOrder(Order order);
@@ -30,13 +37,28 @@ public:
     void loadOrder(const Order& order);
 
 private:
-    std::map<double, std::deque<Order>, std::greater<double>> bids_;
-    std::map<double, std::deque<Order>>                       asks_;
+    // Use integer price keys to avoid floating-point map bucketing issues.
+    // NOTE: This assumes prices are expressed with 2 decimal places (cents).
+    using PriceKey = int64_t;
+    static constexpr PriceKey kPriceScale = 100;
 
-    // Tracks every order ID the book has ever seen (seeded or processed).
-    // Used to skip duplicate Kafka messages on replay after restart.
-    // Java analogy: like a Set<String> deduplication cache.
-    std::unordered_set<std::string> knownIds_;
+    std::map<PriceKey, std::deque<Order>, std::greater<PriceKey>> bids_;
+    std::map<PriceKey, std::deque<Order>>                         asks_;
+
+    // Tracks order IDs to dedupe Kafka replays. Bounded via TTL + max-size eviction.
+    std::unordered_map<std::string, int64_t> knownIds_; // id -> seenAtMs
+    std::deque<std::pair<std::string, int64_t>> knownIdEvictionQueue_;
+
+    std::unique_ptr<RedisDeduplicator> deduplicator_;
 
     std::vector<MatchResult> match();
+
+    static PriceKey toPriceKey(double price);
+    static double fromPriceKey(PriceKey key);
+
+    void rememberId(const std::string& id);
+    bool isKnownId(const std::string& id) const;
+    void evictKnownIds(int64_t nowMs);
+
+    bool tryMarkOrderIdSeen(const std::string& id);
 };

@@ -6,6 +6,7 @@ add_executable(matching-engine
     src/main/service/MatchingHelper.cpp
     src/main/service/OrderBook.cpp
     src/main/service/MatchingService.cpp
+    src/main/dedup/RedisDeduplicator.cpp
 )
 
 target_include_directories(matching-engine PRIVATE

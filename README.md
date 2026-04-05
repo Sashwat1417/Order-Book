@@ -27,12 +27,6 @@ Client  →  order-service  →  MongoDB (bids / asks)
 
 ---
 
-## Confluence Doc 
-
-[link](https://eudoxus.atlassian.net/wiki/spaces/~7120208a67821615d04b3dad24d4b9b2b9f999/pages/393218/Order+Book?atlOrigin=eyJpIjoiNjRkMzkyNGQ4YzkwNDFmNjk1NGVlNWMzOTlmZTA2YWEiLCJwIjoiYyJ9)
-
----
-
 ## Tech Stack
 
 ![C++](https://img.shields.io/badge/C++-17-00599C?style=flat&logo=c%2B%2B)
@@ -74,6 +68,16 @@ brew services start kafka
 brew services start mongodb-community
 ```
 
+#### Optional: Redis dedupe + RedisInsight (GUI)
+```bash
+docker compose -f docker-compose.redis.yml up -d
+```
+Redis is configured with bounded memory + eviction (defaults: `256mb`, `allkeys-lru`).
+Override example:
+```bash
+REDIS_MAXMEMORY=512mb REDIS_MAXMEMORY_POLICY=allkeys-lfu docker compose -f docker-compose.redis.yml up -d
+```
+
 ### 3. Create Kafka topics _(first time only)_
 ```bash
 kafka-topics --create --topic new-orders --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
@@ -98,6 +102,11 @@ cmake --build build
 | `MONGO_URI` | `mongodb://localhost:27017` | MongoDB URI |
 | `KAFKA_BROKERS` | `localhost:9092` | Kafka broker |
 | `SERVER_PORT` | `3000` | API port |
+| `REDIS_DEDUP_ENABLED` | `0` | Enable Redis-based order ID dedupe (`1` to enable) |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_DEDUP_TTL_MS` | `86400000` | Dedupe TTL in ms (e.g., 24h) |
+| `REDIS_PASSWORD` | `` | Redis password (optional) |
 
 ---
 

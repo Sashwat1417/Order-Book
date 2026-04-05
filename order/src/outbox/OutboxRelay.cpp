@@ -24,7 +24,6 @@ OutboxRelay::OutboxRelay(const std::string& mongoUri,
 {}
 
 void OutboxRelay::stop() {
-    std::cout << "[OutboxRelay] Stop requested.\n";
     running_ = false;
 }
 

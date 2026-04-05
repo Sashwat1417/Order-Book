@@ -41,6 +41,10 @@ void sendEmail(const SmtpConfig& cfg,
 
     curl_slist* rcptList = nullptr;
     rcptList = curl_slist_append(rcptList, cfg.recipient.c_str());
+    if (!rcptList) {
+        curl_easy_cleanup(curl);
+        throw std::runtime_error("Failed to build recipient list");
+    }
 
     std::string mailFrom = "<" + cfg.gmailUser + ">";
 

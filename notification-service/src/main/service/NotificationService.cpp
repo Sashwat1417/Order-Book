@@ -14,7 +14,13 @@ NotificationService::NotificationService(const EmailHelper::SmtpConfig& smtpConf
 void NotificationService::processTradeEvent(const std::string& tradeJson) {
     std::cout << "[NotificationService] Processing trade event...\n";
 
-    auto j      = nlohmann::json::parse(tradeJson);
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(tradeJson);
+    } catch (const nlohmann::json::parse_error& e) {
+        std::cerr << "[NotificationService] Failed to parse trade JSON: " << e.what() << "\n";
+        return; // or throw a domain-specific exception to signal poison message
+    }
     Trade trade = Trade::fromJson(j);
 
     std::cout << "[NotificationService] Trade parsed"
@@ -25,10 +31,15 @@ void NotificationService::processTradeEvent(const std::string& tradeJson) {
               << " | ask="   << trade.askOrderId << "\n";
 
     // Format timestamp (Unix ms → readable UTC string)
-    std::time_t sec    = static_cast<std::time_t>(trade.timestamp / 1000);
-    std::tm*    tm_utc = std::gmtime(&sec);
+    std::time_t sec = static_cast<std::time_t>(trade.timestamp / 1000);
+    std::tm tm_utc{};
+#ifdef _WIN32
+    gmtime_s(&tm_utc, &sec);
+#else
+    gmtime_r(&sec, &tm_utc);
+#endif
     char timeBuf[32];
-    std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%dT%H:%M:%SZ", tm_utc);
+    std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
 
     std::string subject = "Trade Executed — " + trade.id;
 

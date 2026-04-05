@@ -11,8 +11,8 @@ int64_t currentTimeMs() {
 }
 
 std::string generateTradeId() {
-    std::mt19937 rng{std::random_device{}()};
-    std::uniform_int_distribution<uint32_t> dist;
+    thread_local std::mt19937 rng{std::random_device{}()};
+    thread_local std::uniform_int_distribution<uint32_t> dist;
     return "trade-" + std::to_string(currentTimeMs())
                     + "-" + std::to_string(dist(rng));
 }

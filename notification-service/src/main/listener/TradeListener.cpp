@@ -10,10 +10,16 @@ TradeListener::TradeListener(const std::string& brokers,
 {
     std::string errstr;
     auto* conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-    conf->set("bootstrap.servers", brokers, errstr);
-    conf->set("group.id",          groupId, errstr);
-    conf->set("enable.auto.commit","false",  errstr);
-    conf->set("auto.offset.reset", "earliest", errstr);
+    auto setConf = [&](const std::string& key, const std::string& value) {
+        if (conf->set(key, value, errstr) != RdKafka::Conf::CONF_OK) {
+            delete conf;
+            throw std::runtime_error("Kafka config error [" + key + "]: " + errstr);
+        }
+    };
+    setConf("bootstrap.servers", brokers);
+    setConf("group.id",          groupId);
+    setConf("enable.auto.commit","false");
+    setConf("auto.offset.reset", "earliest");
 
     consumer_.reset(RdKafka::KafkaConsumer::create(conf, errstr));
     delete conf;
@@ -40,6 +46,11 @@ void TradeListener::poll(const std::function<void(const std::string&)>& handler)
 
     switch (msg->err()) {
         case RdKafka::ERR_NO_ERROR: {
+            if (!msg->payload() || msg->len() == 0) {
+                std::cerr << "[TradeListener] Empty payload, skipping.\n";
+                consumer_->commitSync(msg);
+                break;
+            }
             std::string payload(static_cast<const char*>(msg->payload()), msg->len());
             std::cout << "[TradeListener] Trade event received"
                       << " | partition=" << msg->partition()
