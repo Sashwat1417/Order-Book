@@ -36,6 +36,11 @@ public:
     // Used on startup to restore state from MongoDB.
     void loadOrder(const Order& order);
 
+    // Run one match sweep against the current book state.
+    // Called once after all open orders are seeded to resolve any crossings
+    // that existed before a crash (e.g. partially-filled bid vs open ask).
+    std::vector<MatchResult> runPostSeedMatch();
+
 private:
     // Use integer price keys to avoid floating-point map bucketing issues.
     // NOTE: This assumes prices are expressed with 2 decimal places (cents).

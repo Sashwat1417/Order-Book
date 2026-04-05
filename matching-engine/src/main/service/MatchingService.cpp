@@ -41,7 +41,23 @@ void MatchingService::processOrder(const std::string& orderJson) {
     std::cout << "[MatchingService] " << results.size()
               << " trade(s) to persist and publish.\n";
 
-    // One session per processOrder call — Java analogy: one @Transactional method
+    persistAndPublish(results);
+}
+
+void MatchingService::runPostSeedMatch() {
+    std::cout << "[MatchingService] Running post-seed match sweep...\n";
+    auto results = book_.runPostSeedMatch();
+    if (results.empty()) {
+        std::cout << "[MatchingService] Post-seed sweep: no crossings found.\n";
+        return;
+    }
+    std::cout << "[MatchingService] Post-seed sweep: "
+              << results.size() << " trade(s) to persist and publish.\n";
+    persistAndPublish(results);
+}
+
+void MatchingService::persistAndPublish(const std::vector<MatchResult>& results) {
+    // One session per call — Java analogy: one @Transactional method
     // creating a new EntityManager transaction per invocation.
     auto session = client_.start_session();
 
