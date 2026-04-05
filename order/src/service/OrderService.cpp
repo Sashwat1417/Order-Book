@@ -8,8 +8,6 @@
 
 using json = nlohmann::json;
 
-// ─── Private Helpers ──────────────────────────────────────────────────────────
-
 static int64_t nowMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()
@@ -17,20 +15,16 @@ static int64_t nowMs() {
 }
 
 static std::string generateId() {
-    static std::mt19937 gen(std::random_device{}());
-    static std::uniform_int_distribution<uint32_t> dis;
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<uint32_t> dis;
     return std::to_string(nowMs()) + "-" + std::to_string(dis(gen));
 }
 
-// ─── OrderService ─────────────────────────────────────────────────────────────
-
-OrderService::OrderService(OrderRepository& repository, KafkaProducer& kafkaProducer)
+OrderService::OrderService(OrderRepository& repository)
     : repository_(repository)
-    , kafkaProducer_(kafkaProducer)
 {}
 
 json OrderService::placeOrder(const json& body) {
-    // Validate — like a Spring @Valid check
     if (!body.contains("side") || !body.contains("price") || !body.contains("quantity")) {
         throw std::invalid_argument("Missing required fields: side, price, quantity");
     }
@@ -47,7 +41,6 @@ json OrderService::placeOrder(const json& body) {
         throw std::invalid_argument("price and quantity must be positive");
     }
 
-    // Build the order
     Order order;
     order.id        = generateId();
     order.side      = (side == "BID") ? Side::BID : Side::ASK;
@@ -57,21 +50,14 @@ json OrderService::placeOrder(const json& body) {
     order.status    = OrderStatus::OPEN;
     order.timestamp = nowMs();
 
-    // Persist to MongoDB — if this throws, nothing was written, safe to propagate
-    try {
-        repository_.insertOrder(order);
-    } catch (const std::exception& e) {
-        throw std::runtime_error(std::string("DB insert failed: ") + e.what());
-    }
+    // V2: atomic MongoDB transaction — inserts order + outbox(PENDING) together.
+    // The OutboxRelay background thread picks up the outbox record and
+    // publishes to Kafka. No Kafka call here.
+    repository_.insertOrderWithOutbox(order);
 
-    // Publish to Kafka — if this fails, order is in DB but won't be matched
-    // We throw so the caller knows the order is in an inconsistent state
-    if (!kafkaProducer_.publish(order.toJson().dump())) {
-        throw std::runtime_error("Order saved but failed to publish to Kafka. Order ID: " + order.id);
-    }
-
-    std::cout << "[Service] Order placed: " << order.id
-              << " " << side << " " << quantity << "@" << price << "\n";
+    std::cout << "[OrderService] Order placed and outbox written"
+              << " | id=" << order.id
+              << " | " << side << " " << quantity << "@" << price << "\n";
 
     return order.toJson();
 }
@@ -86,7 +72,7 @@ json OrderService::getOrderBook() {
 bool OrderService::cancelOrder(const std::string& id) {
     bool cancelled = repository_.cancelOrder(id);
     if (cancelled) {
-        std::cout << "[Service] Order cancelled: " << id << "\n";
+        std::cout << "[OrderService] Order cancelled: " << id << "\n";
     }
     return cancelled;
 }

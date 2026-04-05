@@ -1,14 +1,15 @@
 #pragma once
 
 #include "../db/OrderRepository.hpp"
-#include "../kafka/KafkaProducer.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
 
-// Java analogy: equivalent to a Spring @Service class
+// Java analogy: equivalent to a Spring @Service class.
+// V2: no longer holds a KafkaProducer — publishing is handled by
+// the OutboxRelay background thread after the DB transaction commits.
 class OrderService {
 public:
-    OrderService(OrderRepository& repository, KafkaProducer& kafkaProducer);
+    explicit OrderService(OrderRepository& repository);
 
     // Returns the created order as JSON, or throws on validation failure
     nlohmann::json placeOrder(const nlohmann::json& body);
@@ -21,5 +22,4 @@ public:
 
 private:
     OrderRepository& repository_;
-    KafkaProducer&   kafkaProducer_;
 };
